@@ -217,14 +217,27 @@ export class RidgeAcesGame {
 
   private drawMenuSky(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "#5a7084");
-    g.addColorStop(1, "#c4c8a8");
+    g.addColorStop(0, "#4a5a72");
+    g.addColorStop(0.45, "#8a8ea0");
+    g.addColorStop(0.75, "#d6ae7a");
+    g.addColorStop(1, "#e8c696");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "#4a5a38";
+    ctx.fillStyle = "rgba(255,210,120,0.9)";
+    ctx.beginPath();
+    ctx.arc(w * 0.78, h * 0.34, 28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#4e5d48";
     ctx.beginPath();
     ctx.moveTo(0, h);
-    for (let x = 0; x <= w; x += 16) ctx.lineTo(x, h * 0.62 + Math.sin(x * 0.01) * 18);
+    for (let x = 0; x <= w; x += 16) ctx.lineTo(x, h * 0.7 + Math.sin(x * 0.012) * 14);
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#3d4a32";
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let x = 0; x <= w; x += 16) ctx.lineTo(x, h * 0.78 + Math.sin(x * 0.02) * 10);
     ctx.lineTo(w, h);
     ctx.closePath();
     ctx.fill();

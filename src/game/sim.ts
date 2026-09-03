@@ -92,8 +92,15 @@ export class Sim {
   }
 
   heightAt(x: number): number {
-    const i = clamp(Math.floor(x / 40), 0, this.heights.length - 1);
-    return this.heights[i] ?? 168;
+    const wx = wrap(x);
+    const n = this.heights.length;
+    if (n < 2) return 168;
+    const f = wx / 40;
+    const i0 = Math.floor(f);
+    const t = f - i0;
+    const a = this.heights[clamp(i0, 0, n - 1)] ?? 168;
+    const b = this.heights[clamp(i0 + 1, 0, n - 1)] ?? a;
+    return a + (b - a) * t;
   }
 
   private raidLayout() {

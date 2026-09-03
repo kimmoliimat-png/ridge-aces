@@ -1,4 +1,4 @@
-import { FACTION_META, clamp } from "./constants";
+import { FACTION_META, clamp, wrap } from "./constants";
 import type { Sim } from "./sim";
 import type { Building, Plane } from "./types";
 
@@ -21,10 +21,11 @@ export function renderWorld(
   ctx.translate(shakeX, shakeY);
   drawSky(ctx, w, h, camY);
   drawSun(ctx, w, h, camY);
-  drawClouds(ctx, camX, camY, w, h);
-  drawSilhouette(ctx, camX, camY, w, h, 0.18, 36, "#3a4e5c", 0.00072);
-  drawSilhouette(ctx, camX, camY, w, h, 0.34, 48, "#44543a", 0.0012);
+  drawClouds(ctx, camX, camY, w, h, time);
+  drawFarRidge(ctx, sim, camX, camY, w, h, 0.22, 70, "#6a7a88", 0.00055);
+  drawFarRidge(ctx, sim, camX, camY, w, h, 0.4, 44, "#4e5d48", 0.0009);
   drawTerrain(ctx, sim, camX, camY, w, h);
+  drawScatter(ctx, sim, camX, camY, w, h);
   for (const af of sim.airfields) {
     if (Math.abs(af.x - camX) > w * 0.55 + af.half) continue;
     drawRunway(ctx, sim, af, camX, camY, w, h);
@@ -49,6 +50,8 @@ export function renderWorld(
     ctx.beginPath();
     ctx.ellipse(s.x, s.y, 5, 3, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = "#c45c48";
+    ctx.fillRect(s.x - 1, s.y - 6, 2, 5);
   }
   for (const b of sim.bullets) {
     const s = toScreen(b.x, b.y, camX, camY, w, h);
@@ -102,52 +105,72 @@ export function renderWorld(
 }
 
 function drawSky(ctx: CanvasRenderingContext2D, w: number, h: number, camY: number): void {
-  const t = clamp((camY - 200) / 800, 0, 1);
+  const t = clamp((camY - 180) / 900, 0, 1);
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, `rgb(${80 + t * 40},${120 + t * 20},${160 - t * 20})`);
-  g.addColorStop(1, `rgb(${190},${200 - t * 20},${170})`);
+  g.addColorStop(0, `rgb(${72 + t * 18},${88 + t * 10},${118 - t * 8})`);
+  g.addColorStop(0.42, `rgb(${140 + t * 20},${148},${158 - t * 16})`);
+  g.addColorStop(0.72, `rgb(${214},${176 - t * 10},${128})`);
+  g.addColorStop(1, `rgb(${232},${198},${150})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 }
 
 function drawSun(ctx: CanvasRenderingContext2D, w: number, h: number, camY: number): void {
-  const y = 70 + (camY - 400) * 0.04;
-  ctx.fillStyle = "rgba(255,210,120,0.9)";
+  const y = h * 0.38 + (camY - 400) * 0.05;
+  const x = w * 0.78;
+  const glow = ctx.createRadialGradient(x, y, 8, x, y, 90);
+  glow.addColorStop(0, "rgba(255,220,140,0.95)");
+  glow.addColorStop(0.35, "rgba(255,180,90,0.35)");
+  glow.addColorStop(1, "rgba(255,160,80,0)");
+  ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(w * 0.78, y, 34, 0, Math.PI * 2);
+  ctx.arc(x, y, 90, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffe08a";
+  ctx.beginPath();
+  ctx.arc(x, y, 26, 0, Math.PI * 2);
   ctx.fill();
 }
 
-function drawClouds(ctx: CanvasRenderingContext2D, camX: number, camY: number, w: number, h: number): void {
-  ctx.fillStyle = "rgba(255,255,255,0.28)";
-  for (let i = 0; i < 8; i++) {
-    const x = ((i * 420 - camX * 0.22) % (w + 200)) - 80;
-    const y = 40 + ((i * 47) % 90) - (camY - 400) * 0.03;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 70, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
+function drawClouds(ctx: CanvasRenderingContext2D, camX: number, camY: number, w: number, h: number, time: number): void {
+  for (let i = 0; i < 7; i++) {
+    const span = w + 280;
+    const x = ((i * 390 - camX * 0.18 + time * 4) % span + span) % span - 100;
+    const y = 48 + ((i * 53) % 86) - (camY - 400) * 0.025;
+    ctx.fillStyle = i % 2 ? "rgba(255,244,220,0.28)" : "rgba(255,255,255,0.22)";
+    puff(ctx, x, y, 62, 16);
+    puff(ctx, x + 38, y + 4, 44, 13);
+    puff(ctx, x - 30, y + 6, 36, 11);
   }
 }
 
-function drawSilhouette(
+function puff(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number): void {
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawFarRidge(
   ctx: CanvasRenderingContext2D,
+  sim: Sim,
   camX: number,
   camY: number,
   w: number,
   h: number,
   parallax: number,
-  amp: number,
+  lift: number,
   color: string,
   freq: number,
 ): void {
-  const groundSy = h / 2 - (168 - camY);
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(0, h);
-  for (let sx = 0; sx <= w; sx += 18) {
-    const wx = camX + (sx - w / 2) / Math.max(0.2, parallax);
-    const hy = amp * Math.sin(wx * freq) + amp * 0.4 * Math.sin(wx * freq * 2.1);
-    ctx.lineTo(sx, groundSy - 40 - hy * parallax);
+  const step = 16;
+  for (let sx = 0; sx <= w + step; sx += step) {
+    const wx = camX + (sx - w / 2) / Math.max(0.35, parallax);
+    const ground = toScreen(wx, sim.heightAt(wx), camX, camY, w, h).y;
+    const peak = lift + 18 * Math.sin(wx * freq) + 10 * Math.sin(wx * freq * 2.4);
+    ctx.lineTo(sx, ground - peak * parallax);
   }
   ctx.lineTo(w, h);
   ctx.closePath();
@@ -155,40 +178,90 @@ function drawSilhouette(
 }
 
 function drawTerrain(ctx: CanvasRenderingContext2D, sim: Sim, camX: number, camY: number, w: number, h: number): void {
+  const step = 6;
+  const ridge: number[] = [];
+  for (let sx = 0; sx <= w + step; sx += step) {
+    const wx = camX + (sx - w / 2);
+    ridge.push(toScreen(wx, sim.heightAt(wx), camX, camY, w, h).y);
+  }
   ctx.beginPath();
   ctx.moveTo(0, h);
-  const step = 8;
-  for (let sx = 0; sx <= w; sx += step) {
-    const wx = camX + (sx - w / 2);
-    const s = toScreen(wx, sim.heightAt(wx), camX, camY, w, h);
-    ctx.lineTo(sx, s.y);
-  }
+  ridge.forEach((y, i) => ctx.lineTo(i * step, y));
   ctx.lineTo(w, h);
   ctx.closePath();
-  ctx.fillStyle = "#4a5a38";
+  ctx.fillStyle = "#3d4a32";
   ctx.fill();
-  ctx.fillStyle = "#5c6e44";
+
   ctx.beginPath();
   ctx.moveTo(0, h);
-  for (let sx = 0; sx <= w; sx += step) {
-    const wx = camX + (sx - w / 2);
-    const s = toScreen(wx, sim.heightAt(wx) - 12, camX, camY, w, h);
-    ctx.lineTo(sx, s.y);
-  }
+  ridge.forEach((y, i) => ctx.lineTo(i * step, y + 16));
   ctx.lineTo(w, h);
   ctx.closePath();
+  ctx.fillStyle = "#5a4a38";
   ctx.fill();
+
+  ctx.strokeStyle = "#6e804c";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ridge.forEach((y, i) => (i === 0 ? ctx.moveTo(i * step, y) : ctx.lineTo(i * step, y)));
+  ctx.stroke();
 }
 
-function drawRunway(ctx: CanvasRenderingContext2D, sim: Sim, af: { x: number; half: number; friendly: boolean }, camX: number, camY: number, w: number, h: number): void {
-  const dx = af.x - camX;
-  if (Math.abs(dx) > w / 2 + af.half) return;
-  ctx.strokeStyle = af.friendly ? "rgba(200,212,160,0.85)" : "rgba(80,70,60,0.7)";
-  ctx.lineWidth = 10;
+function drawScatter(ctx: CanvasRenderingContext2D, sim: Sim, camX: number, camY: number, w: number, h: number): void {
+  const start = Math.floor((camX - w) / 70) * 70;
+  for (let wx = start; wx < camX + w; wx += 70) {
+    const x = wrap(wx);
+    let onPad = false;
+    for (const af of sim.airfields) {
+      if (Math.abs(wrap(x - af.x)) < af.half - 8 || Math.abs(x - af.x) < af.half - 8) onPad = true;
+    }
+    if (onPad) continue;
+    const g = sim.heightAt(x);
+    const s = toScreen(x, g, camX, camY, w, h);
+    if (s.x < -20 || s.x > w + 20) continue;
+    const kind = Math.abs(Math.sin(x * 0.017));
+    ctx.fillStyle = "#2f3a28";
+    if (kind > 0.55) {
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y - 16 - kind * 10);
+      ctx.lineTo(s.x + 7, s.y + 2);
+      ctx.lineTo(s.x - 7, s.y + 2);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.fillRect(s.x - 5, s.y - 5, 10, 6);
+    }
+  }
+}
+
+function drawRunway(
+  ctx: CanvasRenderingContext2D,
+  sim: Sim,
+  af: { x: number; half: number; friendly: boolean },
+  camX: number,
+  camY: number,
+  w: number,
+  h: number,
+): void {
+  ctx.strokeStyle = af.friendly ? "rgba(210,200,170,0.92)" : "rgba(90,80,70,0.75)";
+  ctx.lineWidth = 14;
   ctx.lineCap = "butt";
   ctx.beginPath();
   let started = false;
-  for (let ox = -af.half; ox <= af.half; ox += 12) {
+  for (let ox = -af.half; ox <= af.half; ox += 10) {
+    const s = toScreen(af.x + ox, sim.heightAt(af.x + ox) + 2, camX, camY, w, h);
+    if (!started) {
+      ctx.moveTo(s.x, s.y);
+      started = true;
+    } else ctx.lineTo(s.x, s.y);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = af.friendly ? "rgba(70,80,50,0.85)" : "rgba(40,36,30,0.7)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 12]);
+  ctx.beginPath();
+  started = false;
+  for (let ox = -af.half + 12; ox <= af.half - 12; ox += 10) {
     const s = toScreen(af.x + ox, sim.heightAt(af.x + ox) + 3, camX, camY, w, h);
     if (!started) {
       ctx.moveTo(s.x, s.y);
@@ -196,9 +269,10 @@ function drawRunway(ctx: CanvasRenderingContext2D, sim: Sim, af: { x: number; ha
     } else ctx.lineTo(s.x, s.y);
   }
   ctx.stroke();
+  ctx.setLineDash([]);
   if (af.friendly) {
     const s = toScreen(af.x, sim.heightAt(af.x) + 28, camX, camY, w, h);
-    ctx.fillStyle = "rgba(200,212,160,0.9)";
+    ctx.fillStyle = "rgba(232, 214, 150, 0.95)";
     ctx.font = "700 12px Oswald, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(af.half > 230 ? "HOME" : "STRIP", s.x, s.y - 8);
@@ -207,26 +281,50 @@ function drawRunway(ctx: CanvasRenderingContext2D, sim: Sim, af: { x: number; ha
 
 function drawBuilding(ctx: CanvasRenderingContext2D, b: Building, camX: number, camY: number, w: number, h: number, time: number): void {
   const s = toScreen(b.x, b.y, camX, camY, w, h);
-  const colors: Record<string, string> = {
-    hangar: "#6a6558",
-    hq: "#c45c48",
-    depot: "#7a6a4a",
-    aa: "#4a4a42",
-    base: "#8a3c32",
-  };
-  ctx.fillStyle = colors[b.kind] ?? "#555";
-  ctx.fillRect(s.x - b.w / 2, s.y - b.h, b.w, b.h);
-  ctx.fillStyle = "rgba(0,0,0,0.2)";
-  ctx.fillRect(s.x - b.w / 2, s.y - b.h, b.w, 6);
-  if (b.kind === "base") {
-    ctx.fillStyle = `rgba(196,92,72,${0.6 + 0.4 * Math.sin(time * 4)})`;
-    ctx.fillRect(s.x - 4, s.y - b.h - 22, 8, 22);
-    ctx.fillRect(s.x - 4, s.y - b.h - 28, 18, 10);
+  const x = s.x;
+  const y = s.y;
+  if (b.kind === "hangar") {
+    ctx.fillStyle = "#6a6558";
+    ctx.fillRect(x - b.w / 2, y - b.h + 14, b.w, b.h - 14);
+    ctx.fillStyle = "#8a7a62";
+    ctx.beginPath();
+    ctx.moveTo(x - b.w / 2 - 6, y - b.h + 16);
+    ctx.lineTo(x, y - b.h - 10);
+    ctx.lineTo(x + b.w / 2 + 6, y - b.h + 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#2a2a24";
+    ctx.fillRect(x - 16, y - 28, 32, 28);
+    return;
+  }
+  if (b.kind === "hq" || b.kind === "base") {
+    ctx.fillStyle = b.kind === "base" ? "#8a3c32" : "#7a6a58";
+    ctx.fillRect(x - b.w / 2, y - b.h + 8, b.w, b.h - 8);
+    ctx.fillStyle = b.kind === "base" ? "#c45c48" : "#5a5044";
+    ctx.fillRect(x - b.w / 2 - 2, y - b.h, b.w + 4, 10);
+    const pulse = 0.55 + 0.45 * Math.sin(time * 4);
+    ctx.fillStyle = `rgba(196,92,72,${pulse})`;
+    ctx.fillRect(x - 2, y - b.h - 22, 4, 22);
+    ctx.fillRect(x - 2, y - b.h - 28, 16, 9);
+    return;
   }
   if (b.kind === "aa") {
+    ctx.fillStyle = "#5a584c";
+    ctx.beginPath();
+    ctx.ellipse(x, y - 4, 16, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = "#2a2a24";
-    ctx.fillRect(s.x - 3, s.y - b.h - 14, 6, 14);
+    ctx.save();
+    ctx.translate(x, y - 10);
+    ctx.rotate(-0.4);
+    ctx.fillRect(0, -3, 22, 6);
+    ctx.restore();
+    return;
   }
+  ctx.fillStyle = "#7a6a4a";
+  ctx.fillRect(x - b.w / 2, y - b.h, b.w, b.h);
+  ctx.fillStyle = "#4a4034";
+  ctx.fillRect(x - b.w / 2, y - b.h, b.w, 7);
 }
 
 function drawPlane(ctx: CanvasRenderingContext2D, p: Plane, camX: number, camY: number, w: number, h: number, time: number): void {
@@ -236,25 +334,54 @@ function drawPlane(ctx: CanvasRenderingContext2D, p: Plane, camX: number, camY: 
   ctx.scale(p.facing, 1);
   ctx.rotate(-p.angle);
   if (p.flash > 0) ctx.globalAlpha = 0.45 + 0.55 * Math.sin(time * 40);
-  ctx.fillStyle = FACTION_META[p.faction].color;
+  const col = FACTION_META[p.faction].color;
+  ctx.fillStyle = "#3a3a34";
+  ctx.fillRect(-6, 6, 3, 10);
+  ctx.fillRect(4, 6, 3, 10);
+  ctx.fillRect(-8, 15, 8, 2);
+  ctx.fillRect(2, 15, 8, 2);
+  ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.moveTo(26, 0);
-  ctx.lineTo(-8, -7);
-  ctx.lineTo(-18, -2);
-  ctx.lineTo(-18, 2);
-  ctx.lineTo(-8, 7);
+  ctx.moveTo(28, 0);
+  ctx.lineTo(10, -5);
+  ctx.lineTo(-16, -4);
+  ctx.lineTo(-22, 0);
+  ctx.lineTo(-16, 4);
+  ctx.lineTo(10, 5);
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = "#efe6cc";
-  ctx.fillRect(-6, -16, 18, 3);
-  ctx.fillRect(-4, 13, 16, 3);
-  ctx.fillRect(-10, -12, 14, 2);
+  ctx.fillRect(-2, -17, 22, 3.2);
+  ctx.fillRect(-4, -8, 24, 3.4);
+  ctx.fillRect(-2, 6, 22, 3.2);
+  ctx.strokeStyle = "#2a2a24";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(6, -16);
+  ctx.lineTo(6, 8);
+  ctx.moveTo(16, -16);
+  ctx.lineTo(16, 8);
+  ctx.stroke();
+  ctx.fillStyle = col;
+  ctx.fillRect(-22, -11, 5, 22);
+  ctx.fillRect(-26, -2, 10, 3);
   ctx.fillStyle = "#2a2a24";
-  ctx.fillRect(-4, -3, 8, 6);
+  ctx.beginPath();
+  ctx.arc(4, -1, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#c45c48";
+  ctx.beginPath();
+  ctx.arc(-6, 0, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#efe6cc";
+  ctx.beginPath();
+  ctx.arc(-6, 0, 1.4, 0, Math.PI * 2);
+  ctx.fill();
   if (p.fuel > 0 && p.state === "air") {
-    ctx.fillStyle = "#d8d0b0";
-    const spin = (time * 40) % 1;
-    ctx.fillRect(22, -6 + spin * 2, 6, 12);
+    ctx.fillStyle = "rgba(230,220,190,0.85)";
+    const spin = (time * 28) % 1;
+    ctx.globalAlpha = 0.55 + 0.35 * Math.abs(Math.sin(spin * Math.PI));
+    ctx.fillRect(26, -8, 5, 16);
   }
   ctx.restore();
 }
@@ -269,7 +396,6 @@ function drawOffscreen(ctx: CanvasRenderingContext2D, sim: Sim, camX: number, ca
     const ay = clamp(s.y, 36, h - 90);
     ctx.fillStyle = FACTION_META[p.faction].color;
     ctx.beginPath();
-    ctx.moveTo(ax, ay);
     ctx.arc(ax, ay, 6, 0, Math.PI * 2);
     ctx.fill();
   }
@@ -291,7 +417,6 @@ function drawBaseMarkers(ctx: CanvasRenderingContext2D, sim: Sim, camX: number, 
     ctx.lineTo(ax - 9, ay - 8);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = `rgba(196,92,72,${pulse})`;
     ctx.font = "700 11px Oswald, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("BASE", ax, ay - 12);
