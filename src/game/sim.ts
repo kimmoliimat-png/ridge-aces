@@ -829,7 +829,7 @@ export class Sim {
       fuelEmpty: !!p && p.fuel <= 0 && p.state === "air",
       stalled: !!p && p.state === "air" && (p.angle > 0.75 || (p.y - g < 110 && p.vy < -50)),
       grounded: !!p && (p.state === "parked" || p.state === "taxi"),
-      hurt: !!p && (p.flash > 0 || p.iframes > 0.2),
+      hurt: !!p && p.flash > 0,
       faction: this.faction,
       message: this.messageT > 0 ? this.message : "",
     };

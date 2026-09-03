@@ -77,13 +77,59 @@ export function GameApp() {
     useGameUI.getState().setOverlay("briefing");
   };
 
+  const playRef = useRef(play);
+  playRef.current = play;
+
+  useEffect(() => {
+    let last = 0;
+    const fire = (e: Event) => {
+      if (useGameUI.getState().overlay !== "menu") return;
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t.closest("a")) return;
+      const now = performance.now();
+      if (now - last < 450) return;
+      const act = t.closest("[data-hangar]")?.getAttribute("data-hangar");
+      if (act === "campaign") {
+        last = now;
+        useGameUI.getState().setOverlay("factions");
+        return;
+      }
+      if (act === "howto") {
+        last = now;
+        useGameUI.getState().setOverlay("howto");
+        return;
+      }
+      if (act === "settings") {
+        last = now;
+        useGameUI.getState().setOverlay("settings");
+        return;
+      }
+      if (act === "skirmish") {
+        last = now;
+        useGameUI.getState().setMission("skirmish");
+        useGameUI.getState().setOverlay("briefing");
+        return;
+      }
+      last = now;
+      playRef.current("quick");
+    };
+    window.addEventListener("pointerdown", fire, true);
+    window.addEventListener("pointerup", fire, true);
+    window.addEventListener("click", fire, true);
+    window.addEventListener("touchend", fire, true);
+    return () => {
+      window.removeEventListener("pointerdown", fire, true);
+      window.removeEventListener("pointerup", fire, true);
+      window.removeEventListener("click", fire, true);
+      window.removeEventListener("touchend", fire, true);
+    };
+  }, []);
+
   const inRaid = overlay === "play" || overlay === "pause";
-  const showWorld = inRaid || overlay === "results";
 
   return (
-    <div
-      className={cn("relative h-[100dvh] w-full bg-bg text-fg overflow-hidden", inRaid ? "touch-none" : "")}
-    >
+    <div className="relative h-[100dvh] w-full bg-bg text-fg overflow-hidden">
       <canvas
         ref={canvasRef}
         className="absolute inset-0 h-full w-full"
@@ -91,12 +137,16 @@ export function GameApp() {
           width: "100%",
           height: "100%",
           pointerEvents: "none",
-          visibility: showWorld ? "visible" : "hidden",
           zIndex: 0,
         }}
       />
 
-      {overlay === "menu" && <Menu onPlay={play} onGo={go} />}
+      {overlay === "menu" && (
+        <Menu
+          onStart={() => play("quick")}
+          onCampaign={() => useGameUI.getState().setOverlay("factions")}
+        />
+      )}
       {overlay === "factions" && (
         <FactionSelect
           onPick={(f) => {
@@ -186,80 +236,72 @@ function Panel({ children, className }: { children: ReactNode; className?: strin
   );
 }
 
-function tapify(fn: () => void) {
-  let lock = false;
-  return (e?: { stopPropagation?: () => void }) => {
-    e?.stopPropagation?.();
-    if (lock) return;
-    lock = true;
-    fn();
-    window.setTimeout(() => {
-      lock = false;
-    }, 350);
-  };
-}
-
-function HitButton({
+function HangarBtn({
+  action,
   label,
-  onTap,
   kind = "primary",
+  onTap,
 }: {
+  action: string;
   label: string;
-  onTap: () => void;
   kind?: "primary" | "secondary" | "ghost";
+  onTap?: () => void;
 }) {
-  const go = tapify(onTap);
   const cls =
     kind === "primary"
-      ? "bg-accent text-fg"
+      ? "bg-accent text-fg min-h-24 text-2xl"
       : kind === "secondary"
-        ? "border border-border bg-surface-2 text-fg"
-        : "text-muted";
+        ? "border border-border bg-surface-2 text-fg min-h-16 text-lg"
+        : "text-muted min-h-12";
+  const tap = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    onTap?.();
+  };
   return (
     <button
       type="button"
+      data-hangar={action}
       aria-label={label}
       className={cn(
-        "relative z-[60] flex min-h-14 w-full items-center justify-center gap-2 rounded-[14px] px-5 font-display text-base tracking-wide",
+        "relative z-[60] flex w-full items-center justify-center rounded-[18px] px-5 font-display tracking-wide",
         cls,
       )}
-      style={{ touchAction: "manipulation", WebkitTapHighlightColor: "rgba(239,230,204,0.25)" }}
-      onPointerDown={go}
-      onTouchStart={go}
-      onClick={go}
+      style={{ touchAction: "manipulation" }}
+      onPointerDown={tap}
+      onClick={tap}
     >
       {label}
     </button>
   );
 }
 
-function Menu({ onPlay, onGo }: { onPlay: (id: string) => void; onGo: (id: string) => void }) {
+function Menu({ onStart, onCampaign }: { onStart: () => void; onCampaign: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ pointerEvents: "auto" }}
+      className="absolute inset-0 z-[100] flex items-center justify-center p-4"
+      data-hangar="start"
+      style={{ pointerEvents: "auto", background: "rgba(20,22,16,0.55)" }}
+      onPointerDown={(e) => {
+        const act = (e.target as HTMLElement).closest("[data-hangar]")?.getAttribute("data-hangar");
+        if (act && act !== "start") return;
+        onStart();
+      }}
     >
       <Panel>
         <p className="font-display text-xs tracking-[0.35em] text-muted uppercase">The ridge war</p>
         <h1 className="font-display text-5xl tracking-[0.12em] text-fg sm:text-6xl">RIDGE ACES</h1>
-        <p className="mt-2 text-sm text-muted">Five raids. Push them off the ridge. Hold left to climb. Bomb the bases.</p>
-        <HitButton label="Start" onTap={() => onPlay("quick")} />
-        <HitButton label="Campaign" kind="secondary" onTap={() => useGameUI.getState().setOverlay("factions")} />
+        <p className="mt-2 text-sm text-muted">Tap anywhere to fly. Campaign is the second button.</p>
+        <HangarBtn action="start" label="Start" onTap={onStart} />
+        <HangarBtn action="campaign" label="Campaign" kind="secondary" onTap={onCampaign} />
         <div className="flex gap-2">
           <div className="min-w-0 flex-1">
-            <HitButton label="How to fly" kind="ghost" onTap={() => useGameUI.getState().setOverlay("howto")} />
+            <HangarBtn action="howto" label="How to fly" kind="ghost" />
           </div>
           <div className="min-w-0 flex-1">
-            <HitButton label="Settings" kind="ghost" onTap={() => useGameUI.getState().setOverlay("settings")} />
+            <HangarBtn action="settings" label="Settings" kind="ghost" />
           </div>
         </div>
-        <button
-          type="button"
-          className="text-left text-xs text-muted hover:text-fg"
-          style={{ touchAction: "manipulation" }}
-          onPointerDown={tapify(() => onGo("skirmish"))}
-          onClick={tapify(() => onGo("skirmish"))}
-        >
+        <button type="button" data-hangar="skirmish" className="text-left text-xs text-muted" style={{ touchAction: "manipulation" }}>
           Skirmish
         </button>
         <Link to="/privacy" className="text-xs text-muted underline decoration-border underline-offset-4 hover:text-fg">
@@ -272,7 +314,7 @@ function Menu({ onPlay, onGo }: { onPlay: (id: string) => void; onGo: (id: strin
 
 function FactionSelect({ onPick, onBack }: { onPick: (f: FactionId) => void; onBack: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: "auto" }}>
       <Panel>
         <h2 className="font-display text-2xl tracking-wide">Choose a squadron</h2>
         <p className="text-sm text-muted">Each crate handles differently. Learn one, then try the others.</p>
@@ -283,8 +325,6 @@ function FactionSelect({ onPick, onBack }: { onPick: (f: FactionId) => void; onB
               <button
                 key={f}
                 type="button"
-                onPointerDown={() => onPick(f)}
-                onTouchStart={() => onPick(f)}
                 onClick={() => onPick(f)}
                 className="rounded-[18px] border border-border bg-surface-2 px-4 py-3 text-left hover:border-fg/30"
               >
@@ -319,7 +359,7 @@ function CampaignSelect({
   const faction = useGameUI((s) => s.faction);
   const unlocked = game?.save.unlocked[faction] ?? 0;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: "auto" }}>
       <Panel>
         <h2 className="font-display text-2xl tracking-wide">
           {FACTION_META[faction].label} vs {FACTION_META[rivalOf(faction)].label}
@@ -358,7 +398,7 @@ function Briefing({ onGo, onBack }: { onGo: () => void; onBack: () => void }) {
   const mission = [QUICK, SKIRMISH, ...CAMPAIGN].find((m) => m.id === id) ?? QUICK;
   const raid = mission.mode === "campaign" ? `Raid ${mission.index + 1} of ${CAMPAIGN.length}` : "Briefing";
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: "auto" }}>
       <Panel>
         <p className="text-xs uppercase tracking-[0.25em] text-muted">{raid}</p>
         <h2 className="font-display text-3xl tracking-wide">{mission.title}</h2>
@@ -376,7 +416,7 @@ function Briefing({ onGo, onBack }: { onGo: () => void; onBack: () => void }) {
 
 function HowTo({ onBack }: { onBack: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: "auto" }}>
       <Panel className="max-w-lg">
         <h2 className="font-display text-2xl tracking-wide">How to fly</h2>
         <ul className="space-y-2 text-sm text-muted">
@@ -415,7 +455,7 @@ function SettingsPanel({ game, onBack }: { game: RidgeAcesGame | null; onBack: (
   const s = game?.save.settings;
   if (!s) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: "auto" }}>
         <Panel>
           <p className="text-muted">Settings load with the hangar.</p>
           <Button onClick={onBack}>Back</Button>
@@ -425,7 +465,7 @@ function SettingsPanel({ game, onBack }: { game: RidgeAcesGame | null; onBack: (
   }
   const bump = () => game?.applySettings();
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: "auto" }}>
       <Panel>
         <h2 className="font-display text-2xl tracking-wide">Settings</h2>
         <label className="flex items-center justify-between text-sm">
